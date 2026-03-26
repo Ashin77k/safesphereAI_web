@@ -1,9 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  auth, db, googleProvider, signInWithPopup, onAuthStateChanged, 
-  collection, onSnapshot, query, orderBy, limit, updateDoc, doc, Timestamp,
-  OperationType, handleFirestoreError, User, addDoc
-} from './firebase';
 import { Emergency, MissingPerson, Notification, UserProfile, LocationHistory } from './types';
 import { backendService } from './services/backendService';
 import { MapView } from './components/MapView';
@@ -23,7 +18,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<{ uid: string; email: string; displayName: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [emergencies, setEmergencies] = useState<Emergency[]>([]);
   const [missingPersons, setMissingPersons] = useState<MissingPerson[]>([]);
@@ -40,15 +35,17 @@ export default function App() {
     if (!user) return;
     setIsSyncing(true);
     try {
-      const [bEmergencies, bMissing, bNotifications] = await Promise.all([
+      const [bEmergencies, bMissing, bNotifications, bHistory] = await Promise.all([
         backendService.fetchEmergencies(),
         backendService.fetchMissingPersons(),
-        backendService.fetchNotifications()
+        backendService.fetchNotifications(),
+        backendService.fetchLocationHistory()
       ]);
       
-      if (bEmergencies.length > 0) setEmergencies(bEmergencies);
-      if (bMissing.length > 0) setMissingPersons(bMissing);
-      if (bNotifications.length > 0) setNotifications(bNotifications);
+      setEmergencies(bEmergencies);
+      setMissingPersons(bMissing);
+      setNotifications(bNotifications);
+      setLocationHistory(bHistory);
     } catch (error) {
       console.error('Backend Sync Error:', error);
     } finally {
@@ -56,106 +53,73 @@ export default function App() {
     }
   };
 
-  // Auth Listener
+  // Mock Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    const savedUser = localStorage.getItem('guardian_user');
+    if (savedUser) {
+      const u = JSON.parse(savedUser);
       setUser(u);
-      if (u) {
-        // Fetch profile
-        try {
-          const userDoc = await doc(db, 'users', u.uid);
-          // In a real app, we'd check if user exists, otherwise create
-          // For this dashboard, we'll assume admin role if email matches
-          const isAdmin = u.email === 'abhinavraj92007@gmail.com';
-          setProfile({
-            id: u.uid,
-            name: u.displayName || 'Unknown',
-            email: u.email || '',
-            role: isAdmin ? 'ADMIN' : 'USER',
-            createdAt: Timestamp.now()
-          });
-        } catch (e) {
-          console.error("Error fetching profile", e);
-        }
-      } else {
-        setProfile(null);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
+      setProfile({
+        id: u.uid,
+        name: u.displayName,
+        email: u.email,
+        role: u.email === 'abhinavraj92007@gmail.com' ? 'ADMIN' : 'USER',
+        createdAt: new Date()
+      });
+    }
+    setLoading(false);
   }, []);
 
-  // Real-time Data Listeners & Backend Polling
+  // Backend Polling
   useEffect(() => {
     if (!user) return;
 
     // Initial backend fetch
     syncWithBackend();
 
-    // Backend polling every 30 seconds
-    const pollInterval = setInterval(syncWithBackend, 30000);
-
-    // Firestore listeners (fallback/real-time)
-    const qEmergencies = query(collection(db, 'emergencies'), orderBy('timestamp', 'desc'), limit(50));
-    const unsubEmergencies = onSnapshot(qEmergencies, (snapshot) => {
-      if (snapshot.docs.length > 0) {
-        setEmergencies(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Emergency)));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.LIST, 'emergencies'));
-
-    const qMissing = query(collection(db, 'missingPersons'), orderBy('timestamp', 'desc'), limit(50));
-    const unsubMissing = onSnapshot(qMissing, (snapshot) => {
-      if (snapshot.docs.length > 0) {
-        setMissingPersons(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as MissingPerson)));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.LIST, 'missingPersons'));
-
-    const qNotifications = query(collection(db, 'notifications'), orderBy('timestamp', 'desc'), limit(20));
-    const unsubNotifications = onSnapshot(qNotifications, (snapshot) => {
-      if (snapshot.docs.length > 0) {
-        setNotifications(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Notification)));
-      }
-    }, (e) => handleFirestoreError(e, OperationType.LIST, 'notifications'));
-
-    const qHistory = query(collection(db, 'locationHistory'), orderBy('timestamp', 'desc'), limit(200));
-    const unsubHistory = onSnapshot(qHistory, (snapshot) => {
-      setLocationHistory(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LocationHistory)));
-    }, (e) => handleFirestoreError(e, OperationType.LIST, 'locationHistory'));
+    // Backend polling every 10 seconds for "real-time" feel
+    const pollInterval = setInterval(syncWithBackend, 10000);
 
     return () => {
       clearInterval(pollInterval);
-      unsubEmergencies();
-      unsubMissing();
-      unsubNotifications();
-      unsubHistory();
     };
   }, [user]);
 
-  const handleLogin = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (e) {
-      console.error("Login failed", e);
-    }
+  const handleLogin = () => {
+    const mockUser = {
+      uid: 'admin-123',
+      email: 'abhinavraj92007@gmail.com',
+      displayName: 'Abhinav Raj'
+    };
+    localStorage.setItem('guardian_user', JSON.stringify(mockUser));
+    setUser(mockUser);
+    setProfile({
+      id: mockUser.uid,
+      name: mockUser.displayName,
+      email: mockUser.email,
+      role: 'ADMIN',
+      createdAt: new Date()
+    });
   };
 
-  const handleLogout = () => auth.signOut();
+  const handleLogout = () => {
+    localStorage.removeItem('guardian_user');
+    setUser(null);
+    setProfile(null);
+  };
 
   const updateStatus = async (type: 'EMERGENCY' | 'MISSING', id: string, newStatus: string) => {
     if (profile?.role !== 'ADMIN') return;
     
-    // Update Backend
-    const backendSuccess = await backendService.updateStatus(type, id, newStatus);
-    
-    // Update Firestore
-    const collectionName = type === 'EMERGENCY' ? 'emergencies' : 'missingPersons';
-    try {
-      await updateDoc(doc(db, collectionName, id), { status: newStatus });
-      if (backendSuccess) {
-        console.log('Status updated on both Backend and Firestore');
+    const success = await backendService.updateStatus(type, id, newStatus);
+    if (success) {
+      // Optimistic update
+      if (type === 'EMERGENCY') {
+        setEmergencies(prev => prev.map(e => e.id === id ? { ...e, status: newStatus as any } : e));
+      } else {
+        setMissingPersons(prev => prev.map(m => m.id === id ? { ...m, status: newStatus as any } : m));
       }
-    } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `${collectionName}/${id}`);
+      syncWithBackend(); // Refresh to be sure
     }
   };
 
@@ -165,7 +129,7 @@ export default function App() {
     // Get current position
     const itemHistory = locationHistory
       .filter(h => h.parentId === item.id)
-      .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     
     const currentPos = itemHistory.length > 0 
       ? itemHistory[0].location 
@@ -177,14 +141,9 @@ export default function App() {
       lng: currentPos.lng + (Math.random() - 0.5) * 0.01
     };
 
-    try {
-      await addDoc(collection(db, 'locationHistory'), {
-        parentId: item.id,
-        location: newPos,
-        timestamp: Timestamp.now()
-      });
-    } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, 'locationHistory');
+    const success = await backendService.addLocationHistory(item.id, newPos);
+    if (success) {
+      syncWithBackend();
     }
   };
 
@@ -192,7 +151,7 @@ export default function App() {
     const items = [
       ...emergencies.map(e => ({ ...e, type: 'EMERGENCY' as const })),
       ...missingPersons.map(m => ({ ...m, type: 'MISSING' as const }))
-    ].sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+    ].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     return items.filter(item => {
       const matchesSearch = item.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -238,7 +197,7 @@ export default function App() {
             onClick={handleLogin}
             className="w-full bg-white text-black font-semibold py-4 rounded-xl hover:bg-white/90 transition-all flex items-center justify-center gap-3"
           >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+            <Shield className="w-5 h-5" />
             Sign in as Administrator
           </button>
         </motion.div>
@@ -340,7 +299,7 @@ export default function App() {
                     )}>
                       {item.type}
                     </div>
-                    <span className="text-[10px] text-white/40">{item.timestamp.toDate().toLocaleTimeString()}</span>
+                    <span className="text-[10px] text-white/40">{item.timestamp.toLocaleTimeString()}</span>
                   </div>
                   <h3 className="font-semibold text-sm mb-1">
                     {item.type === 'EMERGENCY' ? (item.userName || `User: ${item.userId.slice(0, 8)}...`) : item.name}
@@ -423,7 +382,7 @@ export default function App() {
                     )} />
                     <div>
                       <p className="text-white/80">{notif.message}</p>
-                      <p className="text-[10px] text-white/40 mt-1">{notif.timestamp.toDate().toLocaleTimeString()}</p>
+                      <p className="text-[10px] text-white/40 mt-1">{notif.timestamp.toLocaleTimeString()}</p>
                     </div>
                   </div>
                 ))}

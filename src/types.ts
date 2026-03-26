@@ -1,5 +1,3 @@
-import { Timestamp } from './firebase';
-
 export type UserRole = 'ADMIN' | 'USER';
 
 export interface UserProfile {
@@ -7,7 +5,7 @@ export interface UserProfile {
   name: string;
   email: string;
   role: UserRole;
-  createdAt: Timestamp;
+  createdAt: Date;
 }
 
 export interface Location {
@@ -21,7 +19,7 @@ export interface Emergency {
   userName?: string;
   location: Location;
   status: 'ACTIVE' | 'SAFE';
-  timestamp: Timestamp;
+  timestamp: Date;
   description?: string;
 }
 
@@ -30,7 +28,7 @@ export interface MissingPerson {
   name: string;
   lastSeenLocation: Location;
   status: 'MISSING' | 'FOUND';
-  timestamp: Timestamp;
+  timestamp: Date;
   description?: string;
   reportedBy?: string;
 }
@@ -40,7 +38,7 @@ export interface Notification {
   type: 'EMERGENCY' | 'MISSING' | 'STATUS_UPDATE';
   message: string;
   severity: 'HIGH' | 'MEDIUM' | 'LOW';
-  timestamp: Timestamp;
+  timestamp: Date;
   relatedId?: string;
 }
 
@@ -48,5 +46,5 @@ export interface LocationHistory {
   id: string;
   parentId: string;
   location: Location;
-  timestamp: Timestamp;
+  timestamp: Date;
 }

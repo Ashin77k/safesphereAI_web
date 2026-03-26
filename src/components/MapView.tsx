@@ -49,13 +49,13 @@ export const MapView: React.FC<MapProps> = ({ emergencies, missingPersons, locat
   // Get history for selected item
   const selectedHistory = locationHistory
     .filter(h => h.parentId === selectedId)
-    .sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
   // Determine current position (latest from history or initial report)
   const getCurrentPos = (item: Emergency | MissingPerson) => {
     const itemHistory = locationHistory
       .filter(h => h.parentId === item.id)
-      .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     
     if (itemHistory.length > 0) {
       return [itemHistory[0].location.lat, itemHistory[0].location.lng] as [number, number];
@@ -78,7 +78,7 @@ export const MapView: React.FC<MapProps> = ({ emergencies, missingPersons, locat
       {[...emergencies, ...missingPersons].map(item => {
         const itemHistory = locationHistory
           .filter(h => h.parentId === item.id)
-          .sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+          .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
         
         if (itemHistory.length < 1) return null;
 
@@ -103,7 +103,7 @@ export const MapView: React.FC<MapProps> = ({ emergencies, missingPersons, locat
                 icon={dotIcon}
               >
                 <Popup>
-                  <p className="text-[10px] font-bold">Update at {h.timestamp.toDate().toLocaleTimeString()}</p>
+                  <p className="text-[10px] font-bold">Update at {h.timestamp.toLocaleTimeString()}</p>
                 </Popup>
               </Marker>
             ))}
@@ -121,7 +121,7 @@ export const MapView: React.FC<MapProps> = ({ emergencies, missingPersons, locat
             <div className="p-2">
               <h3 className="font-bold text-red-500">EMERGENCY</h3>
               <p className="text-sm">User: {emergency.userName || emergency.userId}</p>
-              <p className="text-xs opacity-70">Reported: {emergency.timestamp.toDate().toLocaleString()}</p>
+              <p className="text-xs opacity-70">Reported: {emergency.timestamp.toLocaleString()}</p>
               <p className="text-[10px] text-blue-400 font-bold mt-1 uppercase">Live Tracking Active</p>
             </div>
           </Popup>
@@ -138,7 +138,7 @@ export const MapView: React.FC<MapProps> = ({ emergencies, missingPersons, locat
             <div className="p-2">
               <h3 className="font-bold text-yellow-500">MISSING PERSON</h3>
               <p className="text-sm">Name: {person.name}</p>
-              <p className="text-xs opacity-70">Last Seen: {person.timestamp.toDate().toLocaleString()}</p>
+              <p className="text-xs opacity-70">Last Seen: {person.timestamp.toLocaleString()}</p>
               <p className="text-[10px] text-blue-400 font-bold mt-1 uppercase">Live Tracking Active</p>
             </div>
           </Popup>
