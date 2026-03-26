@@ -1,0 +1,120 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: userId
+// Fields:
+//   - name: string (required)
+//   - email: string (required)
+//   - role: string (required, enum: ['ADMIN', 'USER'])
+//   - createdAt: timestamp (required)
+//
+// Collection: emergencies
+// Document ID: auto-generated
+// Fields:
+//   - userId: string (required)
+//   - userName: string (optional)
+//   - location: map (required, {lat: number, lng: number})
+//   - status: string (required, enum: ['ACTIVE', 'SAFE'])
+//   - timestamp: timestamp (required)
+//   - description: string (optional)
+//
+// Collection: missingPersons
+// Document ID: auto-generated
+// Fields:
+//   - name: string (required)
+//   - lastSeenLocation: map (required, {lat: number, lng: number})
+//   - status: string (required, enum: ['MISSING', 'FOUND'])
+//   - timestamp: timestamp (required)
+//   - description: string (optional)
+//   - reportedBy: string (optional)
+//
+// Collection: notifications
+// Document ID: auto-generated
+// Fields:
+//   - type: string (required, enum: ['EMERGENCY', 'MISSING', 'STATUS_UPDATE'])
+//   - message: string (required)
+//   - severity: string (required, enum: ['HIGH', 'MEDIUM', 'LOW'])
+//   - timestamp: timestamp (required)
+//   - relatedId: string (optional)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' ||
+         (request.auth.token.email == "abhinavraj92007@gmail.com" && request.auth.token.email_verified == true));
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidLocation(loc) {
+      return loc is map && loc.lat is number && loc.lng is number;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && 
+                      request.resource.data.role == 'USER' &&
+                      isValidEmail(request.resource.data.email);
+      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role);
+    }
+
+    match /emergencies/{emergencyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      request.resource.data.status == 'ACTIVE' &&
+                      isValidLocation(request.resource.data.location);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /missingPersons/{personId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      request.resource.data.status == 'MISSING' &&
+                      isValidLocation(request.resource.data.lastSeenLocation);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.type in ['EMERGENCY', 'MISSING']);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /locationHistory/{historyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      isValidLocation(request.resource.data.location) &&
+                      request.resource.data.parentId is string;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}

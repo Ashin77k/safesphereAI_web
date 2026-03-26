@@ -1,0 +1,5 @@
+{
+  "name": "Guardian Response Dashboard",
+  "description": "Real-time emergency monitoring and missing persons tracking dashboard for emergency responders.",
+  "requestFramePermissions": ["geolocation"]
+}
